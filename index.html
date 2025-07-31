@@ -215,31 +215,61 @@
     const LETTER_DELAY = 40;
     const DISPLAY_TIME = 5000;
     const FADE_OUT = 1000;
+    const RETRY_DELAY = 5000;
     const CONFETTI_BURSTS = 15;
 
     let shoutouts = [], idx = 0;
+    let isFetching = false;
 
     async function fetchShoutouts() {
+      if (isFetching) return;
+      isFetching = true;
+      console.log('Fetching new shoutouts...');
       try { 
         const timestamp = Date.now(); 
         const urlWithCacheBuster = `${endpoint}&_t=${timestamp}`; 
         const res = await fetch(urlWithCacheBuster, { 
           headers: { 
             ...headers, 
-            'Cache-Control': 'no-cache, no-store, must-revalidate', 
-            'Pragma': 'no-cache', 
-            'Expires': '0' 
+            'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Expires': '0' 
           } 
         }); 
-        if (!res.ok) throw new Error(res.statusText); 
-        const newShoutouts = (await res.json()).shoutouts; 
+        if (!res.ok) throw new Error(`HTTP Status: ${res.status}`); 
+        const data = await res.json();
+        const newShoutouts = data.shoutouts;
+
         if (newShoutouts && newShoutouts.length > 0) { 
           shoutouts = newShoutouts; 
           console.log(`Fetched ${shoutouts.length} shoutouts at ${new Date().toLocaleTimeString()}`); 
-        } 
+        } else {
+          shoutouts = [];
+          console.log('No new shoutouts found in the response.');
+        }
       } catch (e) { 
         console.error('Fetch error:', e); 
+        shoutouts = []; // Clear list on error to trigger a retry
+      } finally {
+        isFetching = false;
       }
+    }
+
+    function showWaitingMessage() {
+        const msgEl = document.getElementById('message');
+        msgEl.innerHTML = ''; // Clear previous content
+        msgEl.classList.remove('celebrating', 'fade-out');
+        
+        const body = document.createElement('div');
+        body.className = 'message-body';
+        body.style.justifyContent = 'center';
+        body.style.alignItems = 'center';
+        
+        const waitingText = document.createElement('div');
+        waitingText.className = 'recipient show'; // Reuse recipient style for the text
+        waitingText.style.fontSize = 'clamp(2rem, 5vw, 4rem)';
+        waitingText.textContent = 'Waiting for new shoutouts...';
+        
+        body.append(waitingText);
+        msgEl.append(body);
     }
     
     function createSparkles(element) {
@@ -264,25 +294,16 @@
             spread: Math.random() * 120 + 60, 
             startVelocity: Math.random() * 50 + 30, 
             origin: { x: Math.random() * 0.8 + 0.1, y: Math.random() * 0.3 - 0.1 }, 
-            colors: colors, 
-            shapes: ['square', 'circle'], 
-            scalar: Math.random() * 0.8 + 0.6,
-            gravity: 0.6,
-            ticks: 400
+            colors: colors, shapes: ['square', 'circle'], scalar: Math.random() * 0.8 + 0.6,
+            gravity: 0.6, ticks: 400
           }); 
         }, i * 150); 
       } 
       setTimeout(() => { 
         confetti({ 
-          particleCount: 200, 
-          spread: 160, 
-          startVelocity: 60, 
-          origin: { x: 0.5, y: 0.2 }, 
-          colors: colors, 
-          shapes: ['star'], 
-          scalar: 1.2,
-          gravity: 0.6,
-          ticks: 400
+          particleCount: 200, spread: 160, startVelocity: 60, 
+          origin: { x: 0.5, y: 0.2 }, colors: colors, shapes: ['star'], 
+          scalar: 1.2, gravity: 0.6, ticks: 400
         }); 
       }, CONFETTI_BURSTS * 150);
     }
@@ -292,23 +313,16 @@
         msgEl.innerHTML = '';
         msgEl.classList.remove('celebrating');
 
-        const header = document.createElement('div');
-        header.className = 'message-header';
-        const body = document.createElement('div');
-        body.className = 'message-body';
-        const footer = document.createElement('div');
-        footer.className = 'message-footer';
-
+        const header = document.createElement('div'); header.className = 'message-header';
+        const body = document.createElement('div'); body.className = 'message-body';
+        const footer = document.createElement('div'); footer.className = 'message-footer';
         msgEl.append(header, body, footer);
         
         const rec = document.createElement('div');
         rec.className = 'recipient';
         rec.textContent = (item.mentionsData[0] && `${item.mentionsData[0].first_name}${item.mentionsData[0].last_name ? ' ' + item.mentionsData[0].last_name : ''}`) || item.sender.first_name;
         header.append(rec);
-
-        setTimeout(() => {
-            rec.classList.add('show');
-        }, 100);
+        setTimeout(() => rec.classList.add('show'), 100);
 
         const msgContainer = document.createElement('div');
         msgContainer.className = 'message-text';
@@ -322,7 +336,6 @@
         setTimeout(() => {
             words.forEach((word) => {
                 const wordSpan = document.createElement('span');
-                // FIX: Changed back to `inline-block` to treat words as unbreakable units.
                 wordSpan.style.cssText = `display: inline-block; margin-right: 0.3em;`;
                 [...word].forEach(ch => {
                     const span = document.createElement('span');
@@ -338,7 +351,6 @@
             const messageCompleteDelay = letterIndex * LETTER_DELAY + 500;
             
             setTimeout(() => {
-                document.body.classList.add('celebration-mode');
                 msgEl.classList.add('celebrating');
                 createSparkles(msgContainer);
                 randomConfetti();
@@ -350,83 +362,68 @@
                 if (tags.length > 0) {
                     const hashtagContainer = document.createElement('div');
                     hashtagContainer.className = 'hashtag-container';
-
                     tags.forEach((tag, tagIndex) => {
                         const hashtagEl = document.createElement('div');
-                        
                         const hashtagWords = tag.split(/(?=[A-Z])/); 
                         hashtagWords[0] = hashtagWords[0].replace('#', '#');
-                        
                         hashtagWords.forEach((word, wordIndex) => {
                             const wordSpan = document.createElement('span');
                             wordSpan.className = 'hashtag-word';
                             wordSpan.textContent = word + ' ';
-                            
                             let style = '';
-                            if (tag === '#BeDifferent') {
-                                style = `font-size: clamp(2rem, 5vw, 5rem); font-weight: 800; background: linear-gradient(45deg, #ff6b14, #ffde2f); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;`;
-                            } else if (tag === '#BringTheWow') {
-                                style = `font-size: clamp(2rem, 5vw, 5rem); font-weight: 800; color: #ffde2f; text-shadow: 0 0 20px rgba(255, 222, 47, 0.8);`;
-                            } else if (tag === '#BuildSomethingGreatTogether') {
-                                style = `font-size: clamp(1.5rem, 4vw, 4rem); font-weight: 800; color: #3070b0; text-shadow: 0 0 20px rgba(48, 112, 176, 0.6);`;
-                            }
-                            
+                            if (tag === '#BeDifferent') style = `font-size: clamp(2rem, 5vw, 5rem); font-weight: 800; background: linear-gradient(45deg, #ff6b14, #ffde2f); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;`;
+                            else if (tag === '#BringTheWow') style = `font-size: clamp(2rem, 5vw, 5rem); font-weight: 800; color: #ffde2f; text-shadow: 0 0 20px rgba(255, 222, 47, 0.8);`;
+                            else if (tag === '#BuildSomethingGreatTogether') style = `font-size: clamp(1.5rem, 4vw, 4rem); font-weight: 800; color: #3070b0; text-shadow: 0 0 20px rgba(48, 112, 176, 0.6);`;
                             wordSpan.style.cssText = style;
                             hashtagEl.appendChild(wordSpan);
-                            
-                            setTimeout(() => {
-                                wordSpan.classList.add('show');
-                            }, (tagIndex * 300) + (wordIndex * 150));
+                            setTimeout(() => wordSpan.classList.add('show'), (tagIndex * 300) + (wordIndex * 150));
                         });
-                        
                         hashtagContainer.appendChild(hashtagEl);
                     });
-                    
                     footer.prepend(hashtagContainer);
                 }
                 
                 footer.append(snd);
-                
-                setTimeout(() => {
-                    snd.classList.add('show');
-                }, tags.length > 0 ? tags.length * 300 + 500 : 100);
+                setTimeout(() => snd.classList.add('show'), tags.length > 0 ? tags.length * 300 + 500 : 100);
 
                 setTimeout(() => {
-                    document.body.classList.remove('celebration-mode');
                     header.classList.add('fade-out');
                     body.classList.add('fade-out');
                     footer.classList.add('fade-out');
-
                     const extraTime = tags.length > 0 ? 2500 : 0;
                     setTimeout(cycle, FADE_OUT + extraTime);
-
                 }, DISPLAY_TIME + 2000);
 
             }, messageCompleteDelay);
-            
         }, 800);
     }
 
-    function cycle() {
-      if (!shoutouts.length) { 
-        console.log('No shoutouts available, fetching...'); 
-        fetchShoutouts().then(() => setTimeout(cycle, 5000)); 
-        return; 
+    async function cycle() {
+      // If we have run out of shoutouts in the current list
+      if (idx >= shoutouts.length) {
+        idx = 0; // Reset index
+        shoutouts = []; // Clear the old list
+        showWaitingMessage();
+        
+        await fetchShoutouts(); // Wait for the fetch to complete
+
+        // If fetch was unsuccessful or returned no data, wait and retry
+        if (shoutouts.length === 0) {
+            console.log(`No shoutouts available. Retrying in ${RETRY_DELAY / 1000} seconds.`);
+            setTimeout(cycle, RETRY_DELAY);
+            return;
+        }
       }
-      const item = shoutouts[idx]; 
-      idx = (idx + 1) % shoutouts.length; 
-      console.log(`Showing shoutout ${idx}/${shoutouts.length}: ${item.sender.first_name} -> ${item.mentionsData[0]?.first_name || item.sender.first_name}`); 
+
+      const item = shoutouts[idx];
+      console.log(`Showing shoutout ${idx + 1}/${shoutouts.length}: ${item.sender.first_name} -> ${item.mentionsData[0]?.first_name || item.sender.first_name}`);
+      idx++; // Increment index for the next cycle
       showShoutout(item);
     }
 
-    window.addEventListener('load', async () => {
+    window.addEventListener('load', () => {
       console.log('Culture Feed Display started'); 
-      await fetchShoutouts(); 
-      cycle(); 
-      setInterval(async () => { 
-        console.log('Refreshing shoutouts data...'); 
-        await fetchShoutouts(); 
-      }, 30000);
+      cycle(); // Start the main loop
     });
     
   </script>
