@@ -303,7 +303,7 @@
         
         const rec = document.createElement('div');
         rec.className = 'recipient';
-        rec.textContent = item.mentionsData[0]?.first_name || item.sender.first_name;
+        rec.textContent = (item.mentionsData[0] && `${item.mentionsData[0].first_name}${item.mentionsData[0].last_name ? ' ' + item.mentionsData[0].last_name : ''}`) || item.sender.first_name;
         header.append(rec);
 
         setTimeout(() => {
