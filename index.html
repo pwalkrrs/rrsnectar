@@ -247,29 +247,10 @@
         }
       } catch (e) { 
         console.error('Fetch error:', e); 
-        shoutouts = []; // Clear list on error to trigger a retry
+        shoutouts = [];
       } finally {
         isFetching = false;
       }
-    }
-
-    function showWaitingMessage() {
-        const msgEl = document.getElementById('message');
-        msgEl.innerHTML = ''; // Clear previous content
-        msgEl.classList.remove('celebrating', 'fade-out');
-        
-        const body = document.createElement('div');
-        body.className = 'message-body';
-        body.style.justifyContent = 'center';
-        body.style.alignItems = 'center';
-        
-        const waitingText = document.createElement('div');
-        waitingText.className = 'recipient show'; // Reuse recipient style for the text
-        waitingText.style.fontSize = 'clamp(2rem, 5vw, 4rem)';
-        waitingText.textContent = 'Waiting for new shoutouts...';
-        
-        body.append(waitingText);
-        msgEl.append(body);
     }
     
     function createSparkles(element) {
@@ -399,25 +380,30 @@
     }
 
     async function cycle() {
-      // If we have run out of shoutouts in the current list
+      // If we have run out of shoutouts
       if (idx >= shoutouts.length) {
-        idx = 0; // Reset index
-        shoutouts = []; // Clear the old list
-        showWaitingMessage();
+        idx = 0;
+        shoutouts = [];
         
-        await fetchShoutouts(); // Wait for the fetch to complete
+        // Clear the main display and remove any extra classes
+        const msgEl = document.getElementById('message');
+        msgEl.innerHTML = '';
+        msgEl.classList.remove('celebrating', 'fade-out');
 
-        // If fetch was unsuccessful or returned no data, wait and retry
+        await fetchShoutouts();
+
+        // If fetch was unsuccessful or returned no data, wait and retry silently
         if (shoutouts.length === 0) {
-            console.log(`No shoutouts available. Retrying in ${RETRY_DELAY / 1000} seconds.`);
+            console.log(`No shoutouts. Retrying in ${RETRY_DELAY / 1000}s.`);
             setTimeout(cycle, RETRY_DELAY);
             return;
         }
       }
 
+      // If we have shoutouts, show the next one
       const item = shoutouts[idx];
       console.log(`Showing shoutout ${idx + 1}/${shoutouts.length}: ${item.sender.first_name} -> ${item.mentionsData[0]?.first_name || item.sender.first_name}`);
-      idx++; // Increment index for the next cycle
+      idx++;
       showShoutout(item);
     }
 
