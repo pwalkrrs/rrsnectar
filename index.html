@@ -288,6 +288,21 @@
         }); 
       }, CONFETTI_BURSTS * 150);
     }
+    
+    /**
+     * NEW: Adjusts font size of an element to fit its parent container.
+     */
+    function adjustFontSize(element) {
+        const container = element.parentElement;
+        element.style.fontSize = ''; // Reset to CSS default
+        let currentFontSize = parseFloat(window.getComputedStyle(element, null).getPropertyValue('font-size'));
+        
+        // Check for overflow and shrink font size until it fits.
+        while ((element.scrollHeight > container.clientHeight || element.scrollWidth > container.clientWidth) && currentFontSize > 10) {
+            currentFontSize--;
+            element.style.fontSize = currentFontSize + 'px';
+        }
+    }
 
     function showShoutout(item) {
         const msgEl = document.getElementById('message');
@@ -303,18 +318,20 @@
         rec.className = 'recipient';
         rec.textContent = (item.mentionsData[0] && `${item.mentionsData[0].first_name}${item.mentionsData[0].last_name ? ' ' + item.mentionsData[0].last_name : ''}`) || item.sender.first_name;
         header.append(rec);
+        adjustFontSize(rec); // Adjust recipient name size
         setTimeout(() => rec.classList.add('show'), 100);
 
         const msgContainer = document.createElement('div');
         msgContainer.className = 'message-text';
         body.append(msgContainer);
 
-        let text = item.command.replace(/^@\w+\s*/, '').replace(/\+\d+\b/g, '').trim();
-        const tags = text.match(/#BeDifferent|#BringTheWow|#BuildSomethingGreatTogether/g) || [];
-        const words = text.split(' ');
-        let letterIndex = 0;
-
+        const fullText = item.command.replace(/^@\w+\s*/, '').replace(/\+\d+\b/g, '').trim();
+        const tags = fullText.match(/#BeDifferent|#BringTheWow|#BuildSomethingGreatTogether/g) || [];
+        const textWithoutTags = fullText.replace(/#BeDifferent|#BringTheWow|#BuildSomethingGreatTogether/g, '').trim();
+        const words = textWithoutTags.split(' ');
+        
         setTimeout(() => {
+            // Build the message structure first
             words.forEach((word) => {
                 const wordSpan = document.createElement('span');
                 wordSpan.style.cssText = `display: inline-block; margin-right: 0.3em;`;
@@ -323,13 +340,20 @@
                     span.className = 'letter';
                     span.textContent = ch;
                     wordSpan.append(span);
-                    setTimeout(() => span.classList.add('show'), letterIndex * LETTER_DELAY);
-                    letterIndex++;
                 });
                 msgContainer.append(wordSpan);
             });
 
-            const messageCompleteDelay = letterIndex * LETTER_DELAY + 500;
+            // NOW, adjust font size after content is added
+            adjustFontSize(msgContainer);
+
+            // Then, trigger the animations
+            const letters = msgContainer.querySelectorAll('.letter');
+            letters.forEach((span, index) => {
+                setTimeout(() => span.classList.add('show'), index * LETTER_DELAY);
+            });
+
+            const messageCompleteDelay = letters.length * LETTER_DELAY + 500;
             
             setTimeout(() => {
                 msgEl.classList.add('celebrating');
@@ -365,6 +389,7 @@
                 }
                 
                 footer.append(snd);
+                adjustFontSize(snd); // Adjust sender name size
                 setTimeout(() => snd.classList.add('show'), tags.length > 0 ? tags.length * 300 + 500 : 100);
 
                 setTimeout(() => {
